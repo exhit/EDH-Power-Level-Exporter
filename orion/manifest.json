@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "EDH Power Level Exporter",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Export Commander decks from Archidekt and Moxfield to EDH Power Level",
   "permissions": [
     "tabs",
@@ -29,6 +29,9 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     }
+  },
+  "background": {
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {

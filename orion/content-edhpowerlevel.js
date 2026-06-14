@@ -1,15 +1,5 @@
 // ─── EDH Power Level Exporter — Malformed URL Interceptor (Orion / Mobile) ────
-//
-// Runs as a content script at document_start on every edhpowerlevel.com page.
-// Replaces the Chrome background service-worker approach (webNavigation API)
-// with an in-page redirect — compatible with Orion on iOS/Android where
-// persistent background workers are not available.
-//
-// Detects URLs of the form:
-//   https://edhpowerlevel.com/https://archidekt.com/decks/…
-//   https://edhpowerlevel.com/https://moxfield.com/decks/…
-// (and URL-encoded / joiner variants)
-// then fetches the deck via the source API and redirects to the correct URL.
+// Detailed debugging: logs and catches errors at each step
 
 const EXCLUDED_NAMES = [
   'sideboard', 'side board', 'maybeboard', 'maybe board',
@@ -23,100 +13,212 @@ function nameIsExcluded(cat) {
 }
 
 async function fetchArchidektDeck(deckId) {
-  const resp = await fetch(`https://archidekt.com/api/decks/${deckId}/`, {
-    headers: { 'Accept': 'application/json' }
-  });
-  if (!resp.ok) throw new Error(`Archidekt API ${resp.status}`);
-  const data = await resp.json();
+  console.log('[Step 3.1] Fetching Archidekt deck:', deckId);
+  try {
+    const url = `https://archidekt.com/api/decks/${deckId}/`;
+    console.log('[Step 3.1] URL:', url);
+    const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    console.log('[Step 3.1] Response status:', resp.status);
+    if (!resp.ok) throw new Error(`Archidekt API ${resp.status}`);
+    const data = await resp.json();
+    console.log('[Step 3.1] Data received:', data);
 
-  const excludedCats = new Set();
-  for (const cat of (data.categories || [])) {
-    if (!cat.includedInDeck || nameIsExcluded(cat.name)) excludedCats.add(cat.name);
-  }
+    const excludedCats = new Set();
+    for (const cat of (data.categories || [])) {
+      if (!cat.includedInDeck || nameIsExcluded(cat.name)) excludedCats.add(cat.name);
+    }
 
-  const commander = [];
-  const mainboard = [];
-  for (const entry of (data.cards || [])) {
-    const name = entry.card?.oracleCard?.name || entry.card?.name || '';
-    const qty  = entry.quantity || 1;
-    if (!name) continue;
-    const primaryCat = (Array.isArray(entry.categories) ? entry.categories : [])[0] || '';
-    if (primaryCat.toLowerCase() === 'commander') commander.push({ qty, name });
-    else if (!excludedCats.has(primaryCat)) mainboard.push({ qty, name });
+    const commander = [], mainboard = [];
+    for (const entry of (data.cards || [])) {
+      const name = entry.card?.oracleCard?.name || entry.card?.name || '';
+      const qty = entry.quantity || 1;
+      if (!name) continue;
+      const primaryCat = (Array.isArray(entry.categories) ? entry.categories : [])[0] || '';
+      if (primaryCat.toLowerCase() === 'commander') {
+        commander.push({ qty, name });
+      } else if (!excludedCats.has(primaryCat)) {
+        mainboard.push({ qty, name });
+      }
+    }
+    const result = { commander: commander[0] || null, mainboard };
+    console.log('[Step 3.1] Processed deck:', result);
+    return result;
+  } catch (err) {
+    console.error('[Step 3.1] Archidekt fetch failed:', err);
+    throw err;
   }
-  return { commander: commander[0] || null, mainboard };
 }
 
-const MOXFIELD_EXCLUDED = new Set([
-  'sideboard', 'maybeboard', 'tokens', 'emblems',
-  'attractions', 'stickers', 'planes', 'schemes'
-]);
-
 async function fetchMoxfieldDeck(deckId) {
-  const resp = await fetch(`https://api.moxfield.com/v2/decks/all/${deckId}`, {
-    headers: { 'Accept': 'application/json', 'User-Agent': 'EDH-PowerLevel-Exporter/1.0' }
-  });
-  if (!resp.ok) throw new Error(`Moxfield API ${resp.status}`);
-  const data = await resp.json();
+  console.log('[Step 3.2] Fetching Moxfield deck:', deckId);
+  try {
+    const url = `https://api.moxfield.com/v2/decks/all/${deckId}`;
+    console.log('[Step 3.2] URL:', url);
+    const resp = await fetch(url, {
+      headers: { 'Accept': 'application/json', 'User-Agent': 'EDH-PowerLevel-Exporter/1.0' }
+    });
+    console.log('[Step 3.2] Response status:', resp.status);
+    if (!resp.ok) throw new Error(`Moxfield API ${resp.status}`);
+    const data = await resp.json();
+    console.log('[Step 3.2] Data received:', data);
 
-  const commander = [];
-  const mainboard = [];
-  for (const [, e] of Object.entries(data.commanders || {})) {
-    const name = e.card?.name || '';
-    if (name) commander.push({ qty: e.quantity || 1, name });
-  }
-  for (const board of ['mainboard', 'companions']) {
-    for (const [, e] of Object.entries(data[board] || {})) {
+    const commander = [], mainboard = [];
+    for (const [, e] of Object.entries(data.commanders || {})) {
       const name = e.card?.name || '';
-      if (name) mainboard.push({ qty: e.quantity || 1, name });
+      if (name) commander.push({ qty: e.quantity || 1, name });
     }
+    for (const board of ['mainboard', 'companions']) {
+      for (const [, e] of Object.entries(data[board] || {})) {
+        const name = e.card?.name || '';
+        if (name) mainboard.push({ qty: e.quantity || 1, name });
+      }
+    }
+    const result = { commander: commander[0] || null, mainboard };
+    console.log('[Step 3.2] Processed deck:', result);
+    return result;
+  } catch (err) {
+    console.error('[Step 3.2] Moxfield fetch failed:', err);
+    throw err;
   }
-  return { commander: commander[0] || null, mainboard };
 }
 
 function buildEDHUrl({ commander, mainboard }) {
-  const enc = s => encodeURIComponent(s).replace(/%20/g, '+');
-  const cmdQty  = commander?.qty  || 1;
-  const cmdName = commander?.name || 'Unknown Commander';
-  const commanderPart = `Commander~${cmdQty}+${enc(cmdName)}`;
-  const mainPart = 'Mainboard~' + mainboard.map(c => `${c.qty}+${enc(c.name)}`).join('~');
-  return `https://edhpowerlevel.com/?d=${commanderPart}~~${mainPart}~~Z~`;
+  console.log('[Step 4] Building EDH URL');
+  try {
+    const enc = s => encodeURIComponent(s).replace(/%20/g, '+');
+    const cmdQty = commander?.qty || 1;
+    const cmdName = commander?.name || 'Unknown Commander';
+    const commanderPart = `Commander~${cmdQty}+${enc(cmdName)}`;
+    const mainPart = 'Mainboard~' + mainboard.map(c => `${c.qty}+${enc(c.name)}`).join('~');
+    const url = `https://edhpowerlevel.com/?d=${commanderPart}~~${mainPart}~~Z~`;
+    console.log('[Step 4] Built URL:', url);
+    return url;
+  } catch (err) {
+    console.error('[Step 4] URL building failed:', err);
+    throw err;
+  }
+}
+
+function fetchDeckViaBackground(site, deckId) {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(
+      {
+        type: "fetchDeck",
+        site,
+        deckId
+      },
+      (response) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+          return;
+        }
+
+        if (!response?.success) {
+          reject(new Error(response?.error || "Unknown error"));
+          return;
+        }
+
+        resolve(response.data);
+      }
+    );
+  });
 }
 
 (async () => {
-  // Decode common percent-encodings so we can pattern-match cleanly
-  const decoded = window.location.href
-    .replace(/%20/gi, ' ')
-    .replace(/%2B/gi, '+')
-    .replace(/%2F/gi, '/')
-    .replace(/%3A/gi, ':')
-    .replace(/%3F/gi, '?')
-    .replace(/%26/gi, '&')
-    .replace(/%23/gi, '#');
-
-  // Find any embedded Archidekt or Moxfield URL in the current location
-  const sourceMatch = decoded.match(
-    /https?:\/\/(?:www\.)?(?:archidekt\.com|moxfield\.com)\/[^\s"'<>]*/i
-  );
-  if (!sourceMatch) return;
-
-  const embeddedUrl = sourceMatch[0].replace(/[+\s,;|]+$/, '');
+  console.log('[Step 1] Starting malformed URL check');
 
   try {
-    let deckData;
-    if (embeddedUrl.includes('archidekt.com')) {
-      const m = embeddedUrl.match(/\/decks\/(\d+)/);
-      if (!m) throw new Error('Could not extract Archidekt deck ID');
-      deckData = await fetchArchidektDeck(m[1]);
-    } else if (embeddedUrl.includes('moxfield.com')) {
-      const m = embeddedUrl.match(/\/decks\/([A-Za-z0-9_-]+)/);
-      if (!m) throw new Error('Could not extract Moxfield deck ID');
-      deckData = await fetchMoxfieldDeck(m[1]);
-    } else {
+    // STEP 1: Get current URL from multiple sources
+    console.log('[Step 1] Current URL (href):', window.location.href);
+    console.log('[Step 1] pathname:', window.location.pathname);
+    console.log('[Step 1] search:', window.location.search);
+    console.log('[Step 1] hash:', window.location.hash);
+
+    // Try document.location.toString() as well
+    const docLocStr = document.location.toString();
+    console.log('[Step 1] document.location.toString():', docLocStr);
+
+    // The full URL might be in pathname if it wasn't properly parsed
+    let url = window.location.href;
+    if (window.location.pathname && window.location.pathname.length > 1) {
+      // pathname might contain the embedded URL
+      url = window.location.protocol + '//' + window.location.host + window.location.pathname;
+      console.log('[Step 1] Using reconstructed URL from pathname:', url);
+    }
+
+    // STEP 2: Decode URL
+    console.log('[Step 2] Decoding URL');
+    const decoded = url
+      .replace(/%20/gi, ' ')
+      .replace(/%2B/gi, '+')
+      .replace(/%2F/gi, '/')
+      .replace(/%3A/gi, ':')
+      .replace(/%3F/gi, '?')
+      .replace(/%26/gi, '&')
+      .replace(/%23/gi, '#');
+    console.log('[Step 2] Decoded URL:', decoded);
+
+    // STEP 2b: Check if this is edhpowerlevel.com
+    if (!decoded.includes('edhpowerlevel.com')) {
+      console.log('[Step 2b] Not an edhpowerlevel.com URL, exiting. URL = ' + decoded);
       return;
     }
-    window.location.replace(buildEDHUrl(deckData));
+
+    // STEP 2c: Look for embedded deck URL
+    console.log('[Step 2c] Looking for embedded deck URL in: ' + decoded);
+    const sourceMatch = decoded.match(
+      /https?:\/+(?:www\.)?(?:archidekt\.com|moxfield\.com)\/decks\/[^\s"'<>]*/i
+    );
+
+    if (!sourceMatch) {
+      console.log('[Step 2c] No embedded deck URL found in decoded URL');
+      console.log('[Step 2c] Full decoded string to check:', decoded);
+      return;
+    }
+
+    console.log('[Step 2c] Found embedded URL:', sourceMatch[0]);
+
+    // STEP 3: Extract and normalize embedded URL
+    console.log('[Step 3] Extracting deck source');
+    const embeddedUrl = sourceMatch[0]
+      .replace(/^https?:\/+/, 'https://')
+      .replace(/[+\s,;|]+$/, '');
+    console.log('[Step 3] Normalized embedded URL:', embeddedUrl);
+
+    // STEP 3a: Determine site and extract deck ID
+    let deckData;
+    if (embeddedUrl.includes("archidekt.com")) {
+      const m = embeddedUrl.match(/\/decks\/(\d+)/);
+
+      if (!m) {
+        throw new Error(
+          "Could not extract Archidekt deck ID from: " + embeddedUrl
+        );
+      }
+
+      deckData = await fetchDeckViaBackground("archidekt", m[1]);
+    } else if (embeddedUrl.includes("moxfield.com")) {
+      const m = embeddedUrl.match(/\/decks\/([A-Za-z0-9_-]+)/);
+
+      if (!m) {
+        throw new Error(
+          "Could not extract Moxfield deck ID from: " + embeddedUrl
+        );
+      }
+
+      deckData = await fetchDeckViaBackground("moxfield", m[1]);
+    } else {
+      throw new Error("Unknown deck source: " + embeddedUrl);
+    }
+
+    // STEP 5: Navigate
+    console.log('[Step 5] Navigating to EDH Power Level');
+    const correctUrl = buildEDHUrl(deckData);
+    console.log('[Step 5] Final URL:', correctUrl);
+    window.location.replace(correctUrl);
+
   } catch (err) {
-    console.error('[EDH Exporter] redirect failed:', err);
+    console.error('[ERROR]', err);
+    console.error('[ERROR] Stack:', err.stack);
   }
 })();

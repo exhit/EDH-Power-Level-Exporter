@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-06-14
+
+### Fixed
+- Extension CORS issue when calling for an URL not directly from that URL's domain. Used sendMessage to service worker to bypass the issue
+
+## [1.6.0] - 2026-06-14
+
+### Removed
+- Complex and unnecessary popup funcionalities
+
 ## [1.5.0] - 2026-06-14
 
 ### Added
