@@ -327,46 +327,5 @@ $('btnExport').addEventListener('click', async () => {
   }
 });
 
-// ─── Orion mode ──────────────────────────────────────────────────────────────
-// webNavigation absence is the runtime signal that we're in Orion (or any
-// browser that doesn't support it). Show a minimal UI, fetch the deck, open
-// EDH Power Level in a new tab, then close the popup.
-async function runOrionMode() {
-  document.body.style.cssText = [
-    'margin:0', 'padding:16px 20px',
-    'background:#0d0d12', 'color:#e8e4d8',
-    'font-family:-apple-system,system-ui,sans-serif',
-    'font-size:14px', 'min-width:220px', 'width:auto', 'min-height:auto'
-  ].join(';');
-  document.body.innerHTML = '<p id="orion-msg">⏳ Loading deck…</p>';
+init();
 
-  const setMsg = t => { const el = document.getElementById('orion-msg'); if (el) el.textContent = t; };
-
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const url    = tab?.url || '';
-    const site   = detectSite(url);
-    const deckId = site ? getDeckId(url, site) : null;
-
-    if (!site || !deckId) {
-      setMsg('Open an Archidekt or Moxfield deck page first.');
-      return;
-    }
-
-    const result = site === 'archidekt'
-      ? await fetchArchidekt(deckId)
-      : await fetchMoxfield(deckId);
-
-    chrome.tabs.create({ url: buildEDHUrl(result) });
-    window.close();
-  } catch (err) {
-    setMsg('⚠️ ' + err.message);
-  }
-}
-
-// ─── Entry point ─────────────────────────────────────────────────────────────
-if (typeof chrome.webNavigation !== 'undefined') {
-  init();          // Chrome: full popup UI
-} else {
-  runOrionMode();  // Orion: fetch and open immediately
-}

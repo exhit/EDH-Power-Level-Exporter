@@ -1,13 +1,10 @@
 {
   "manifest_version": 3,
   "name": "EDH Power Level Exporter",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "description": "Export Commander decks from Archidekt and Moxfield to EDH Power Level",
   "permissions": [
-    "scripting",
     "tabs",
-    "webNavigation",
-    "activeTab",
     "storage"
   ],
   "host_permissions": [
@@ -19,21 +16,19 @@
     "https://api.archidekt.com/*",
     "https://www.moxfield.com/*"
   ],
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
-  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "background": {
-    "service_worker": "background.js"
+  "action": {
+    "default_popup": "action.html",
+    "default_title": "EDH Power Level Exporter",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
   },
   "content_scripts": [
     {
