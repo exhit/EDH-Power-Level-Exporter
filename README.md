@@ -6,62 +6,65 @@ A Manifest V3 Chrome Extension that exports Commander decks from **Archidekt** a
 
 ## Installation
 
-> **No Chrome Web Store listing** — install manually in a few steps. Takes about 2 minutes.
-
-### Step 1 — Download the extension
-
-**Option A (easiest): Download as ZIP**
-1. [Download](https://github.com/exhit/EDH-Power-Level-Exporter/archive/refs/heads/main.zip)
-2. Unzip the folder somewhere you won't accidentally delete it (e.g. `Documents/EDH-Power-Level-Exporter`)
-3. Go to [Chrome Extension Page](chrome://extensions/) "chrome://extensions/"
-4. Turn on "Developer Mode" on the top right corner
-5. Click the "Load unpacked" on the top left corner
-6. Choose the unpacked zip folder
-
-**Option B: Clone with Git**
-```bash
-git clone https://github.com/YOUR_USERNAME/edh-powerlevel-exporter.git
-```
+> **No store listing** — install manually in a few steps. Takes about 2 minutes.
 
 ---
 
-### Step 2 — Open Chrome Extensions
+### Desktop — Chrome
 
-Paste this into your Chrome address bar and press Enter:
+**Step 1 — Download**
 
+- **ZIP (easiest):** [Download ZIP](https://github.com/exhit/EDH-Power-Level-Exporter/archive/refs/heads/main.zip) and unzip it somewhere permanent (e.g. `Documents/EDH-Power-Level-Exporter`)
+- **Git:** `git clone https://github.com/exhit/EDH-Power-Level-Exporter.git`
+
+**Step 2 — Open the Extensions page**
+
+Paste into your Chrome address bar and press Enter:
 ```
 chrome://extensions
 ```
 
-Or go to: **Chrome menu (⋮) → Extensions → Manage Extensions**
+**Step 3 — Enable Developer Mode**
 
----
+Flip the **Developer mode** toggle in the top-right corner **ON**.
 
-### Step 3 — Enable Developer Mode
+**Step 4 — Load the extension**
 
-In the top-right corner of the Extensions page, flip the **Developer mode** toggle **ON**.
-
----
-
-### Step 4 — Load the extension
-
-1. Click the **Load unpacked** button (top-left, appears after enabling Developer mode)
-2. Select the folder you downloaded/cloned in Step 1
+1. Click **Load unpacked** (top-left)
+2. Select the **`chrome/`** folder inside the downloaded/cloned directory
 3. Click **Select Folder**
 
-The **EDH Power Level Exporter** icon will appear in your Chrome toolbar. Pin it for easy access via the puzzle-piece icon (🧩) next to the address bar.
+The **EDH Power Level Exporter** icon will appear in your toolbar. Pin it via the puzzle-piece icon next to the address bar.
 
----
+**Updating**
 
-### Updating
+ZIP: re-download, replace folder contents, then click **↺** next to the extension on `chrome://extensions`.
 
-**Option A (ZIP):** Re-download the ZIP, replace the folder contents, then click **↺** (refresh) next to the extension on `chrome://extensions`.
-
-**Option B (Git):**
+Git:
 ```bash
 git pull
 ```
-Then click **↺** next to the extension on `chrome://extensions`.
+Then click **↺** on `chrome://extensions`.
+
+---
+
+### Mobile — Orion Browser (iOS)
+
+[Orion](https://kagi.com/orion/) is a free WebKit browser by Kagi that supports Chrome extensions natively on iPhone and iPad.
+
+**Step 1 — Download**
+
+Same as above — download the ZIP or clone the repo.
+
+**Step 2 — Open Orion Settings**
+
+In Orion on iOS, go to: **Settings → Extensions**
+
+**Step 3 — Load the extension**
+
+Tap **Load Unpacked Extension** and select the **`orion/`** folder inside the downloaded/cloned directory.
+
+The **EDH Power Level Exporter** will appear in Orion's extension list and is ready to use on Archidekt and Moxfield deck pages.
 
 ---
 
