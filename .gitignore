@@ -1,0 +1,14 @@
+# Build output
+*.zip
+*.crx
+*.pem
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
