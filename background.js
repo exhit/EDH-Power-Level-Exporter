@@ -82,7 +82,11 @@ function buildEDHUrl({ commander, mainboard }) {
   return `https://edhpowerlevel.com/?d=${commanderPart}~~${mainPart}~~Z~`;
 }
 
-// ─── Navigation listener ──────────────────────────────────────────────────────
+// ─── Navigation listener (Chrome only) ───────────────────────────────────────
+// webNavigation is not available on Orion; the content-edhpowerlevel.js content
+// script handles malformed URL interception there instead.
+if (!chrome.webNavigation) return;
+
 chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
   // Only top-level navigations
   if (details.frameId !== 0) return;

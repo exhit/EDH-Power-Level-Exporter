@@ -31,7 +31,7 @@ Flip the **Developer mode** toggle in the top-right corner **ON**.
 **Step 4 — Load the extension**
 
 1. Click **Load unpacked** (top-left)
-2. Select the **`chrome/`** folder inside the downloaded/cloned directory
+2. Select the root folder inside the downloaded/cloned directory
 3. Click **Select Folder**
 
 The **EDH Power Level Exporter** icon will appear in your toolbar. Pin it via the puzzle-piece icon next to the address bar.
@@ -62,7 +62,7 @@ In Orion on iOS, go to: **Settings → Extensions**
 
 **Step 3 — Load the extension**
 
-Tap **Load Unpacked Extension** and select the **`orion/`** folder inside the downloaded/cloned directory.
+Tap **Load Unpacked Extension** and select the root folder inside the downloaded/cloned directory.
 
 The **EDH Power Level Exporter** will appear in Orion's extension list and is ready to use on Archidekt and Moxfield deck pages.
 
