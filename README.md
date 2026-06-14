@@ -13,7 +13,7 @@ A Manifest V3 Chrome Extension that exports Commander decks from **Archidekt** a
 **Option A (easiest): Download as ZIP**
 1. [Download](https://github.com/exhit/EDH-Power-Level-Exporter/archive/refs/heads/main.zip)
 2. Unzip the folder somewhere you won't accidentally delete it (e.g. `Documents/EDH-Power-Level-Exporter`)
-3. Go to [chrome extension page](chrome://extensions/)
+3. Go to [Chrome Extension Page](chrome://extensions/) "chrome://extensions/"
 4. Turn on "Developer Mode" on the top right corner
 5. Click the "Load unpacked" on the top left corner
 6. Choose the unpacked zip folder
