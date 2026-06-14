@@ -1,9 +1,9 @@
-// ─── EDH Power Level Exporter — Popup (Chrome & Orion) ─────────────────────────
-//
-// Browser-agnostic UI: popup.html is empty.
-// This script detects the browser and builds the appropriate UI (Chrome or Orion).
+// ─── EDH Power Level Exporter — Popup Controller ─────────────────────────────
 
-// ─── Shared helpers ───────────────────────────────────────────────────────────
+// Hard-coded name-based exclusions — ONLY unambiguous "not in deck" names.
+// Do NOT add gameplay categories like "Tokens", "Removal", "Cuts" here.
+// For Archidekt, includedInDeck:false is the authoritative signal.
+// For Moxfield, board names like "sideboard"/"maybeboard" are structural.
 const EXCLUDED_NAMES = [
   'sideboard', 'side board', 'maybeboard', 'maybe board',
   'maybe-board', 'side-board', 'wishlist', 'watch list',
@@ -11,9 +11,13 @@ const EXCLUDED_NAMES = [
 ];
 
 function nameIsExcluded(category) {
-  return EXCLUDED_NAMES.some(ex => (category || '').toLowerCase().trim() === ex);
+  const lower = (category || '').toLowerCase().trim();
+  // Use exact/boundary matching — never substring — to avoid catching
+  // real gameplay categories like "Tokens" or "Cutting Board" etc.
+  return EXCLUDED_NAMES.some(ex => lower === ex);
 }
 
+// ─── Site detection ───────────────────────────────────────────────────────────
 function detectSite(url) {
   if (!url) return null;
   if (url.includes('archidekt.com')) return 'archidekt';
@@ -37,6 +41,24 @@ function getDeckId(url, site) {
 }
 
 // ─── Archidekt ────────────────────────────────────────────────────────────────
+// API: GET https://archidekt.com/api/decks/<id>/
+//
+// Response shape:
+// {
+//   categories: [ { name: "Commander", isPrimary: true, includedInDeck: true }, ... ],
+//   cards: [
+//     {
+//       quantity: 1,
+//       categories: ["Commander"],          // primary category is FIRST
+//       card: { oracleCard: { name: "..." } }
+//     }, ...
+//   ]
+// }
+//
+// KEY INSIGHT: The deck-level `categories` array has `includedInDeck` on each
+// category. If a category has `includedInDeck: false`, it is a custom
+// maybeboard / sideboard and should be excluded regardless of its name.
+
 async function fetchArchidekt(deckId) {
   const resp = await fetch(`https://archidekt.com/api/decks/${deckId}/`, {
     headers: { 'Accept': 'application/json' }
@@ -44,9 +66,11 @@ async function fetchArchidekt(deckId) {
   if (!resp.ok) throw new Error(`Archidekt API error ${resp.status}: ${resp.statusText}`);
   const data = await resp.json();
 
+  // Build a set of excluded category names using the deck's own metadata
   const excludedCats = new Set();
   for (const cat of (data.categories || [])) {
     const name = cat.name || '';
+    // Exclude if explicitly not in deck, OR if the name matches known patterns
     if (!cat.includedInDeck || nameIsExcluded(name)) {
       excludedCats.add(name);
     }
@@ -61,6 +85,7 @@ async function fetchArchidekt(deckId) {
     const qty  = entry.quantity || 1;
     if (!name) continue;
 
+    // Primary category is always the first element
     const allCats = Array.isArray(entry.categories) ? entry.categories : [];
     const primaryCat = allCats[0] || '';
 
@@ -74,13 +99,34 @@ async function fetchArchidekt(deckId) {
   }
 
   return {
-    commander: commander[0] || null,
+    commander: commander[0] || null,   // { qty, name }
     mainboard,
-    skipped: [...skipped]
+    skipped: [...skipped],
+    debug: {
+      totalCards: data.cards?.length,
+      deckCategories: (data.categories || []).map(c => `${c.name} (inDeck:${c.includedInDeck})`)
+    }
   };
 }
 
 // ─── Moxfield ─────────────────────────────────────────────────────────────────
+// API: GET https://api.moxfield.com/v2/decks/all/<publicId>
+//
+// Response shape (TOP LEVEL — no "boards" wrapper):
+// {
+//   commanders: { "Card Name": { quantity: 1, card: { name: "..." } }, ... },
+//   mainboard:  { "Card Name": { quantity: 1, card: { name: "..." } }, ... },
+//   sideboard:  { ... },
+//   maybeboard: { ... },
+//   companions: { ... },
+//   attractions: { ... },
+//   stickers: { ... },
+//   ...
+// }
+//
+// The card key IS the card name. `details.card.name` is the canonical name.
+// Commander cards do NOT have a quantity field (default 1).
+
 const MOXFIELD_EXCLUDED_BOARDS = new Set([
   'sideboard', 'maybeboard', 'tokens', 'emblems',
   'attractions', 'stickers', 'planes', 'schemes',
@@ -101,12 +147,14 @@ async function fetchMoxfield(deckId) {
   const mainboard = [];
   const skipped   = [];
 
+  // Commanders board
   for (const [, entry] of Object.entries(data.commanders || {})) {
     const name = entry.card?.name || '';
     const qty  = entry.quantity || 1;
     if (name) commander.push({ qty, name });
   }
 
+  // Companions count as part of mainboard for EDH purposes
   const includeBoards = ['mainboard', 'companions'];
   for (const boardName of includeBoards) {
     for (const [, entry] of Object.entries(data[boardName] || {})) {
@@ -116,6 +164,7 @@ async function fetchMoxfield(deckId) {
     }
   }
 
+  // Track what we skipped
   for (const boardName of MOXFIELD_EXCLUDED_BOARDS) {
     const board = data[boardName] || {};
     if (Object.keys(board).length > 0) skipped.push(boardName);
@@ -124,13 +173,17 @@ async function fetchMoxfield(deckId) {
   return {
     commander: commander[0] || null,
     mainboard,
-    skipped
+    skipped,
+    debug: {
+      boardsFound: Object.keys(data).filter(k => typeof data[k] === 'object' && data[k] !== null)
+    }
   };
 }
 
 // ─── URL builder ──────────────────────────────────────────────────────────────
 function buildEDHUrl({ commander, mainboard }) {
   const enc = s => encodeURIComponent(s).replace(/%20/g, '+');
+  // commander is { qty, name } or null
   const cmdQty  = commander?.qty  || 1;
   const cmdName = commander?.name || 'Unknown Commander';
   const commanderPart = `Commander~${cmdQty}+${enc(cmdName)}`;
@@ -140,108 +193,50 @@ function buildEDHUrl({ commander, mainboard }) {
   return `https://edhpowerlevel.com/?d=${commanderPart}~~${mainPart}~~Z~`;
 }
 
-// ─── Browser detection ────────────────────────────────────────────────────────
-const IS_CHROME = typeof chrome.webNavigation !== 'undefined';
+// ─── UI helpers ───────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
 
-// ─── Chrome UI (Full featured) ─────────────────────────────────────────────────
-async function buildChromeUI() {
-  const root = document.getElementById('root');
-
-  root.innerHTML = `
-    <div class="header">
-      <svg class="logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="32" height="32" rx="8" fill="#1a0a2e"/>
-        <path d="M16 4L28 10V22L16 28L4 22V10L16 4Z" fill="none" stroke="#c8973a" stroke-width="1.5"/>
-        <path d="M16 8L24 12V20L16 24L8 20V12L16 8Z" fill="#2a1a4e"/>
-        <path d="M13 16C13 14.34 14.34 13 16 13C17.66 13 19 14.34 19 16C19 17.66 17.66 19 16 19" stroke="#c8973a" stroke-width="1.5" stroke-linecap="round"/>
-        <path d="M16 10V13M16 19V22M10 16H13M22 16H19" stroke="#8b2be2" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-      <div class="header-text">
-        <h1>EDH POWER LEVEL</h1>
-        <p>Commander Deck Exporter</p>
-      </div>
-    </div>
-    <div class="body">
-      <div class="site-badge">
-        <div class="site-dot" id="siteDot"></div>
-        <div class="site-label"><span id="siteLabel">Detecting site…</span></div>
-      </div>
-      <div class="toggle-row">
-        <span class="toggle-label">Auto-analyze &amp; open on EDH Power Level</span>
-        <label class="toggle">
-          <input type="checkbox" id="autoOpen">
-          <span class="toggle-track"></span>
-        </label>
-      </div>
-      <div class="deck-info" id="deckInfo">
-        <div class="deck-info-row">
-          <span class="di-label">Commander</span>
-          <span class="di-value di-commander" id="infoCommander">—</span>
-        </div>
-        <div class="deck-info-row">
-          <span class="di-label">Main deck cards</span>
-          <span class="di-value" id="infoCount">—</span>
-        </div>
-        <div class="deck-info-row">
-          <span class="di-label">Skipped categories</span>
-          <span class="di-value" id="infoSkipped">—</span>
-        </div>
-      </div>
-      <div class="warning" id="warningBox"></div>
-      <button class="btn-export" id="btnExport" disabled>
-        <span class="btn-icon">⚔</span>
-        Analyze Deck
-      </button>
-      <div class="status" id="statusBox"></div>
-    </div>
-    <div class="footer">Supports Archidekt · Moxfield</div>
-  `;
-
-  // Attach Chrome UI logic
-  await initChromeUI();
+function setSiteBadge(html, state) {
+  $('siteLabel').innerHTML = html;
+  $('siteDot').className = 'site-dot' + (state === 'ok' ? ' active' : state === 'err' ? ' error' : '');
 }
 
-async function initChromeUI() {
-  const $ = id => document.getElementById(id);
+function showWarning(msg) {
+  const w = $('warningBox');
+  if (msg) { w.innerHTML = msg; w.className = 'warning visible'; }
+  else      { w.className = 'warning'; }
+}
 
-  let currentTab  = null;
-  let currentSite = null;
-  let deckId      = null;
-  let deckData    = null;
-  let analyzed    = false;
+function showStatus(msg, type) {
+  $('statusBox').innerHTML = msg;
+  $('statusBox').className = `status visible ${type}`;
+}
 
-  const SITE_NAMES = { archidekt: 'Archidekt', moxfield: 'Moxfield' };
+function showDeckInfo(commander, mainboard, skipped) {
+  const mainTotal = mainboard.reduce((s, c) => s + c.qty, 0);
+  const cmdTotal  = commander ? (commander.qty || 1) : 0;
+  const total     = mainTotal + cmdTotal;
+  $('infoCommander').textContent = commander ? commander.name : '(none found)';
+  $('infoCount').textContent     = `${total} cards`;
+  $('infoSkipped').textContent   = skipped.length ? skipped.join(', ') : 'none';
+  $('deckInfo').className        = 'deck-info visible';
+}
 
-  const setSiteBadge = (html, state) => {
-    $('siteLabel').innerHTML = html;
-    $('siteDot').className = 'site-dot' + (state === 'ok' ? ' active' : state === 'err' ? ' error' : '');
-  };
+// ─── Main ─────────────────────────────────────────────────────────────────────
+let currentTab  = null;
+let currentSite = null;
+let deckId      = null;
+let deckData    = null;
+let analyzed    = false;
 
-  const showWarning = (msg) => {
-    const w = $('warningBox');
-    if (msg) { w.innerHTML = msg; w.className = 'warning visible'; }
-    else      { w.className = 'warning'; }
-  };
+const SITE_NAMES = { archidekt: 'Archidekt', moxfield: 'Moxfield' };
 
-  const showStatus = (msg, type) => {
-    $('statusBox').innerHTML = msg;
-    $('statusBox').className = `status visible ${type}`;
-  };
-
-  const showDeckInfo = (commander, mainboard, skipped) => {
-    const mainTotal = mainboard.reduce((s, c) => s + c.qty, 0);
-    const cmdTotal  = commander ? (commander.qty || 1) : 0;
-    const total     = mainTotal + cmdTotal;
-    $('infoCommander').textContent = commander ? commander.name : '(none found)';
-    $('infoCount').textContent     = `${total} cards`;
-    $('infoSkipped').textContent   = skipped.length ? skipped.join(', ') : 'none';
-    $('deckInfo').className        = 'deck-info visible';
-  };
-
+async function init() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   currentTab  = tab;
   currentSite = detectSite(tab?.url);
 
+  // Restore toggle state
   const stored = await chrome.storage.sync.get('autoOpen');
   const autoOn = stored.autoOpen === true;
   $('autoOpen').checked = autoOn;
@@ -265,76 +260,85 @@ async function initChromeUI() {
   setSiteBadge(`<span class="site-name">${SITE_NAMES[currentSite]}</span> — deck #${deckId}`, 'ok');
   $('btnExport').disabled = false;
 
-  // Attach click handler BEFORE triggering auto-open
-  $('btnExport').addEventListener('click', async () => {
-    if (!analyzed) {
-      $('btnExport').disabled = true;
-      $('btnExport').innerHTML = '<span class="spinner"></span>Reading deck…';
-      showStatus('', '');
-      showWarning('');
-      $('deckInfo').className = 'deck-info';
-
-      try {
-        let result;
-        if (currentSite === 'archidekt') {
-          result = await fetchArchidekt(deckId);
-        } else if (currentSite === 'moxfield') {
-          result = await fetchMoxfield(deckId);
-        } else {
-          throw new Error('Unsupported site.');
-        }
-
-        deckData = result;
-
-        const warnings = [];
-        if (!deckData.commander) {
-          warnings.push('⚠ No commander found. Make sure there is a "Commander" category.');
-        }
-        const total = deckData.mainboard.reduce((s, c) => s + c.qty, 0) + (deckData.commander?.qty || 1);
-        if (total < 99 || total > 102) {
-          warnings.push(`⚠ Deck has ${total} cards (expected 100).`);
-        }
-
-        showDeckInfo(deckData.commander, deckData.mainboard, deckData.skipped);
-        if (warnings.length) showWarning(warnings.join('<br>'));
-
-        analyzed = true;
-        $('btnExport').disabled = false;
-        $('btnExport').innerHTML = '<span class="btn-icon">⚡</span>Open on EDH Power Level';
-
-        if ($('autoOpen').checked) $('btnExport').click();
-
-      } catch (err) {
-        showStatus('⚠ ' + err.message, 'error');
-        $('btnExport').innerHTML = '<span class="btn-icon">⚔</span>Analyze Deck';
-        $('btnExport').disabled = false;
-      }
-
-    } else {
-      if (!deckData) return;
-      const url = buildEDHUrl({
-        commander: deckData.commander || { qty: 1, name: 'Unknown Commander' },
-        mainboard: deckData.mainboard
-      });
-      chrome.tabs.create({ url });
-      showStatus('✓ Opened EDH Power Level in a new tab!', 'success');
-      $('btnExport').innerHTML = '<span class="btn-icon">✓</span>Opened!';
-      if ($('autoOpen').checked) { window.close(); return; }
-      setTimeout(() => {
-        $('btnExport').innerHTML = '<span class="btn-icon">⚡</span>Open on EDH Power Level';
-      }, 2000);
-    }
-  });
-
-  // NOW trigger auto-open if enabled
+  // Auto-run if toggle is on
   if (autoOn) $('btnExport').click();
 }
 
-// ─── Orion UI (Minimal) ────────────────────────────────────────────────────────
-async function buildOrionUI() {
-  const root = document.getElementById('root');
-  root.style.cssText = 'margin:0;padding:16px 20px;background:#0d0d12;color:#e8e4d8;font-family:-apple-system,system-ui,sans-serif;font-size:14px;min-width:220px;width:auto;min-height:auto;';
-  root.innerHTML = '<p id="orion-msg">⏳ Loading deck…</p>';
+$('btnExport').addEventListener('click', async () => {
+  if (!analyzed) {
+    $('btnExport').disabled = true;
+    $('btnExport').innerHTML = '<span class="spinner"></span>Reading deck…';
+    showStatus('', '');
+    showWarning('');
+    $('deckInfo').className = 'deck-info';
+
+    try {
+      let result;
+      if (currentSite === 'archidekt') {
+        result = await fetchArchidekt(deckId);
+      } else if (currentSite === 'moxfield') {
+        result = await fetchMoxfield(deckId);
+      } else {
+        throw new Error('Unsupported site.');
+      }
+
+      deckData = result;
+
+      // Warnings
+      const warnings = [];
+      if (!deckData.commander) {
+        warnings.push('⚠ No commander found. Make sure there is a "Commander" category.');
+      }
+      const total = deckData.mainboard.reduce((s, c) => s + c.qty, 0) + (deckData.commander?.qty || 1);
+      if (total < 99 || total > 102) {
+        warnings.push(`⚠ Deck has ${total} cards (expected 100).`);
+      }
+
+      showDeckInfo(deckData.commander, deckData.mainboard, deckData.skipped);
+      if (warnings.length) showWarning(warnings.join('<br>'));
+
+      analyzed = true;
+      $('btnExport').disabled = false;
+      $('btnExport').innerHTML = '<span class="btn-icon">⚡</span>Open on EDH Power Level';
+
+      // Auto mode: immediately open if no blocking warnings
+      if ($('autoOpen').checked) $('btnExport').click();
+
+    } catch (err) {
+      showStatus('⚠ ' + err.message, 'error');
+      $('btnExport').innerHTML = '<span class="btn-icon">⚔</span>Analyze Deck';
+      $('btnExport').disabled = false;
+    }
+
+  } else {
+    if (!deckData) return;
+    const url = buildEDHUrl({
+      commander: deckData.commander || { qty: 1, name: 'Unknown Commander' },
+      mainboard: deckData.mainboard
+    });
+    chrome.tabs.create({ url });
+    showStatus('✓ Opened EDH Power Level in a new tab!', 'success');
+    $('btnExport').innerHTML = '<span class="btn-icon">✓</span>Opened!';
+    // In auto mode, close the popup immediately after opening
+    if ($('autoOpen').checked) { window.close(); return; }
+    setTimeout(() => {
+      $('btnExport').innerHTML = '<span class="btn-icon">⚡</span>Open on EDH Power Level';
+    }, 2000);
+  }
+});
+
+// ─── Orion mode ──────────────────────────────────────────────────────────────
+// webNavigation absence is the runtime signal that we're in Orion (or any
+// browser that doesn't support it). Show a minimal UI, fetch the deck, open
+// EDH Power Level in a new tab, then close the popup.
+async function runOrionMode() {
+  document.body.style.cssText = [
+    'margin:0', 'padding:16px 20px',
+    'background:#0d0d12', 'color:#e8e4d8',
+    'font-family:-apple-system,system-ui,sans-serif',
+    'font-size:14px', 'min-width:220px', 'width:auto', 'min-height:auto'
+  ].join(';');
+  document.body.innerHTML = '<p id="orion-msg">⏳ Loading deck…</p>';
 
   const setMsg = t => { const el = document.getElementById('orion-msg'); if (el) el.textContent = t; };
 
@@ -360,9 +364,9 @@ async function buildOrionUI() {
   }
 }
 
-// ─── Entry point ──────────────────────────────────────────────────────────────
-if (IS_CHROME) {
-  buildChromeUI();
+// ─── Entry point ─────────────────────────────────────────────────────────────
+if (typeof chrome.webNavigation !== 'undefined') {
+  init();          // Chrome: full popup UI
 } else {
-  buildOrionUI();
+  runOrionMode();  // Orion: fetch and open immediately
 }
