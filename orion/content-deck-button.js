@@ -1,9 +1,9 @@
-// ─── EDH Power Level Exporter — Mobile Floating Button ───────────────────────
+// ─── EDH Power Level Exporter — Mobile Floating Button (Orion iOS) ───────────
 //
-// Injects a floating "Analyze Deck" button on Archidekt and Moxfield deck pages.
-// Single tap: fetches the deck and opens EDH Power Level in a new tab.
-// Handles SPA navigation so the button appears/disappears as the URL changes.
+// Injects a floating button on Archidekt and Moxfield deck pages.
+// Tap → fetch deck → navigate to edhpowerlevel.com with the deck pre-loaded.
 
+// ─── Category exclusions ─────────────────────────────────────────────────────
 const EXCLUDED_NAMES = [
   'sideboard', 'side board', 'maybeboard', 'maybe board',
   'maybe-board', 'side-board', 'wishlist', 'watch list',
@@ -11,20 +11,18 @@ const EXCLUDED_NAMES = [
 ];
 
 function nameIsExcluded(cat) {
-  const lower = (cat || '').toLowerCase().trim();
-  return EXCLUDED_NAMES.some(ex => lower === ex);
+  return EXCLUDED_NAMES.some(ex => (cat || '').toLowerCase().trim() === ex);
 }
 
 // ─── Site + deck detection ───────────────────────────────────────────────────
 function detectSite() {
-  const host = window.location.hostname;
-  if (host.includes('archidekt.com')) return 'archidekt';
-  if (host.includes('moxfield.com'))  return 'moxfield';
+  const h = window.location.hostname;
+  if (h.includes('archidekt.com')) return 'archidekt';
+  if (h.includes('moxfield.com'))  return 'moxfield';
   return null;
 }
 
 function getDeckId(site) {
-  if (!site) return null;
   const m = site === 'archidekt'
     ? window.location.pathname.match(/\/decks\/(\d+)/)
     : window.location.pathname.match(/\/decks\/([A-Za-z0-9_-]+)/);
@@ -40,18 +38,17 @@ async function fetchArchidektDeck(deckId) {
   const data = await resp.json();
 
   const excludedCats = new Set();
-  for (const cat of (data.categories || [])) {
+  for (const cat of (data.categories || []))
     if (!cat.includedInDeck || nameIsExcluded(cat.name)) excludedCats.add(cat.name);
-  }
 
   const commander = [], mainboard = [];
   for (const entry of (data.cards || [])) {
     const name = entry.card?.oracleCard?.name || entry.card?.name || '';
     const qty  = entry.quantity || 1;
     if (!name) continue;
-    const primaryCat = (Array.isArray(entry.categories) ? entry.categories : [])[0] || '';
-    if (primaryCat.toLowerCase() === 'commander') commander.push({ qty, name });
-    else if (!excludedCats.has(primaryCat)) mainboard.push({ qty, name });
+    const cat = (Array.isArray(entry.categories) ? entry.categories : [])[0] || '';
+    if (cat.toLowerCase() === 'commander') commander.push({ qty, name });
+    else if (!excludedCats.has(cat))       mainboard.push({ qty, name });
   }
   return { commander: commander[0] || null, mainboard };
 }
@@ -80,15 +77,13 @@ async function fetchMoxfieldDeck(deckId) {
 
 // ─── URL builder ─────────────────────────────────────────────────────────────
 function buildEDHUrl({ commander, mainboard }) {
-  const enc = s => encodeURIComponent(s).replace(/%20/g, '+');
-  const cmdQty  = commander?.qty  || 1;
-  const cmdName = commander?.name || 'Unknown Commander';
-  const commanderPart = `Commander~${cmdQty}+${enc(cmdName)}`;
-  const mainPart = 'Mainboard~' + mainboard.map(c => `${c.qty}+${enc(c.name)}`).join('~');
-  return `https://edhpowerlevel.com/?d=${commanderPart}~~${mainPart}~~Z~`;
+  const enc  = s => encodeURIComponent(s).replace(/%20/g, '+');
+  const cmd  = `Commander~${commander?.qty || 1}+${enc(commander?.name || 'Unknown Commander')}`;
+  const main = 'Mainboard~' + mainboard.map(c => `${c.qty}+${enc(c.name)}`).join('~');
+  return `https://edhpowerlevel.com/?d=${cmd}~~${main}~~Z~`;
 }
 
-// ─── Floating action button ───────────────────────────────────────────────────
+// ─── Floating button ─────────────────────────────────────────────────────────
 const FAB_ID = 'edh-powerlevel-fab';
 
 function removeButton() {
@@ -100,7 +95,7 @@ function injectButton(site, deckId) {
 
   const btn = document.createElement('button');
   btn.id = FAB_ID;
-  btn.textContent = '⚔  Analyze Deck';
+  btn.textContent = '⚔  Open on EDH Power Level';
 
   Object.assign(btn.style, {
     position:                'fixed',
@@ -113,81 +108,46 @@ function injectButton(site, deckId) {
     fontFamily:              '-apple-system, system-ui, sans-serif',
     fontSize:                '15px',
     fontWeight:              '600',
-    letterSpacing:           '0.03em',
     border:                  'none',
     borderRadius:            '50px',
     cursor:                  'pointer',
     boxShadow:               '0 4px 20px rgba(139,43,226,0.55)',
-    transition:              'opacity 0.15s, transform 0.1s',
     WebkitTapHighlightColor: 'transparent',
     touchAction:             'manipulation',
     userSelect:              'none',
   });
 
-  btn.addEventListener('touchstart', () => { btn.style.transform = 'scale(0.96)'; }, { passive: true });
-  btn.addEventListener('touchend',   () => { btn.style.transform = 'scale(1)'; },   { passive: true });
-
   btn.addEventListener('click', async () => {
-    btn.disabled = true;
-    btn.textContent = '⏳  Analyzing…';
-    btn.style.opacity = '0.75';
-
-    // Open a blank tab synchronously within the gesture so iOS doesn't block it
-    const win = window.open('', '_blank');
+    btn.textContent = '⏳  Loading…';
+    btn.disabled    = true;
 
     try {
-      const deckData = site === 'archidekt'
+      const deck = site === 'archidekt'
         ? await fetchArchidektDeck(deckId)
         : await fetchMoxfieldDeck(deckId);
 
-      const url = buildEDHUrl(deckData);
-
-      if (win) {
-        win.location.href = url;
-      } else {
-        // Popup was blocked — navigate current tab as fallback
-        window.location.href = url;
-      }
-
-      btn.textContent = '✓  Opened!';
-      btn.style.background = 'linear-gradient(135deg, #3ecf7e 0%, #1a8c50 100%)';
-      btn.style.opacity = '1';
-      setTimeout(() => {
-        btn.textContent = '⚔  Analyze Deck';
-        btn.style.background = 'linear-gradient(135deg, #8b2be2 0%, #5a1fa0 100%)';
-        btn.disabled = false;
-      }, 2500);
-
+      window.location.href = buildEDHUrl(deck);
     } catch (err) {
-      if (win) win.close();
+      console.error('[EDH Exporter]', err);
       btn.textContent = '⚠  Error — tap to retry';
-      btn.style.background = 'linear-gradient(135deg, #e2483d 0%, #8b1a1a 100%)';
-      btn.style.opacity = '1';
-      btn.disabled = false;
-      setTimeout(() => {
-        btn.textContent = '⚔  Analyze Deck';
-        btn.style.background = 'linear-gradient(135deg, #8b2be2 0%, #5a1fa0 100%)';
-      }, 3000);
+      btn.disabled    = false;
+      setTimeout(() => { btn.textContent = '⚔  Open on EDH Power Level'; }, 3000);
     }
   });
 
   document.body.appendChild(btn);
 }
 
-// ─── Page state tracking (SPA navigation aware) ───────────────────────────────
+// ─── SPA navigation awareness ─────────────────────────────────────────────────
 function checkPage() {
   const site   = detectSite();
   const deckId = getDeckId(site);
-  if (site && deckId) {
-    injectButton(site, deckId);
-  } else {
-    removeButton();
-  }
+  if (site && deckId) injectButton(site, deckId);
+  else                removeButton();
 }
 
 checkPage();
 
-// Re-evaluate whenever the SPA changes the URL without a full page reload
 let lastHref = location.href;
 new MutationObserver(() => {
   if (location.href !== lastHref) {
