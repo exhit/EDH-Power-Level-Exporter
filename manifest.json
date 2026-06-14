@@ -4,10 +4,7 @@
   "version": "1.5.0",
   "description": "Export Commander decks from Archidekt and Moxfield to EDH Power Level",
   "permissions": [
-    "scripting",
     "tabs",
-    "webNavigation",
-    "activeTab",
     "storage"
   ],
   "host_permissions": [
