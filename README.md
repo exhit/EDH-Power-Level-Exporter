@@ -6,28 +6,62 @@ A Manifest V3 Chrome Extension that exports Commander decks from **Archidekt** a
 
 ## Installation
 
-### From source (developer mode)
+> **No Chrome Web Store listing** — install manually in a few steps. Takes about 2 minutes.
 
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/edh-powerlevel-exporter.git
-   ```
+### Step 1 — Download the extension
 
-2. Open Chrome and go to `chrome://extensions`
+**Option A (easiest): Download as ZIP**
+1. [Download](https://github.com/exhit/EDH-Power-Level-Exporter/archive/refs/heads/main.zip)
+2. Unzip the folder somewhere you won't accidentally delete it (e.g. `Documents/EDH-Power-Level-Exporter`)
+3. Go to [chrome extension page](chrome://extensions/)
+4. Turn on "Developer Mode" on the top right corner
+5. Click the "Load unpacked" on the top left corner
+6. Choose the unpacked zip folder
 
-3. Enable **Developer mode** (toggle in the top-right corner)
+**Option B: Clone with Git**
+```bash
+git clone https://github.com/YOUR_USERNAME/edh-powerlevel-exporter.git
+```
 
-4. Click **Load unpacked** and select the cloned folder
+---
 
-The extension icon will appear in your Chrome toolbar.
+### Step 2 — Open Chrome Extensions
+
+Paste this into your Chrome address bar and press Enter:
+
+```
+chrome://extensions
+```
+
+Or go to: **Chrome menu (⋮) → Extensions → Manage Extensions**
+
+---
+
+### Step 3 — Enable Developer Mode
+
+In the top-right corner of the Extensions page, flip the **Developer mode** toggle **ON**.
+
+---
+
+### Step 4 — Load the extension
+
+1. Click the **Load unpacked** button (top-left, appears after enabling Developer mode)
+2. Select the folder you downloaded/cloned in Step 1
+3. Click **Select Folder**
+
+The **EDH Power Level Exporter** icon will appear in your Chrome toolbar. Pin it for easy access via the puzzle-piece icon (🧩) next to the address bar.
+
+---
 
 ### Updating
 
+**Option A (ZIP):** Re-download the ZIP, replace the folder contents, then click **↺** (refresh) next to the extension on `chrome://extensions`.
+
+**Option B (Git):**
 ```bash
 git pull
 ```
-
-Then click the **↺ refresh** button on `chrome://extensions`.
+Then click **↺** next to the extension on `chrome://extensions`.
 
 ---
 
