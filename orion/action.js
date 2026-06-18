@@ -17,11 +17,28 @@ function detectSite(url) {
   return null;
 }
 
-function getDeckId(url, site) {
-  const m = site === 'archidekt'
-    ? url.match(/\/decks\/(\d+)/)
-    : url.match(/\/decks\/([A-Za-z0-9_-]+)/);
-  return m ? m[1] : null;
+function parseArchidektRef(param) {
+  const m = (param || '').match(/^([ds])_(\d+)$/);
+  if (!m) return null;
+  return m[1] === 's' ? `snapshots/${m[2]}` : m[2];
+}
+
+function getDeckRefs(url, site) {
+  if (site === 'archidekt') {
+    const params = new URLSearchParams(url.split('?')[1] || '');
+    const one = parseArchidektRef(params.get('one'));
+    const two = parseArchidektRef(params.get('two'));
+    if (one && two) return [one, two];
+    if (one) return [one];
+    const snapshotM   = url.match(/\/snapshots\/(\d+)/);
+    if (snapshotM) return [`snapshots/${snapshotM[1]}`];
+    const playtesterM = url.match(/\/playtester[^/]*\/(\d+)/);
+    if (playtesterM) return [playtesterM[1]];
+    const m = url.match(/\/decks\/(\d+)/);
+    return m ? [m[1]] : [];
+  }
+  const m = url.match(/\/decks\/([A-Za-z0-9_-]+)/);
+  return m ? [m[1]] : [];
 }
 
 async function fetchArchidektDeck(deckId) {
@@ -44,7 +61,7 @@ async function fetchArchidektDeck(deckId) {
     if (cat.toLowerCase() === 'commander') commander.push({ qty, name });
     else if (!excludedCats.has(cat))       mainboard.push({ qty, name });
   }
-  return { commander: commander[0] || null, mainboard };
+  return { commanders: commander, mainboard };
 }
 
 async function fetchMoxfieldDeck(deckId) {
@@ -65,12 +82,15 @@ async function fetchMoxfieldDeck(deckId) {
       if (name) mainboard.push({ qty: e.quantity || 1, name });
     }
   }
-  return { commander: commander[0] || null, mainboard };
+  return { commanders: commander, mainboard };
 }
 
-function buildEDHUrl({ commander, mainboard }) {
-  const enc  = s => encodeURIComponent(s).replace(/%20/g, '+');
-  const cmd  = `Commander~${commander?.qty || 1}+${enc(commander?.name || 'Unknown Commander')}`;
+function buildEDHUrl({ commanders, mainboard }) {
+  const enc     = s => encodeURIComponent(s).replace(/%20/g, '+');
+  const cmdList = (commanders?.length)
+    ? commanders.map(c => `${c.qty}+${enc(c.name)}`).join('~')
+    : `1+${enc('Unknown Commander')}`;
+  const cmd  = `Commander~${cmdList}`;
   const main = 'Mainboard~' + mainboard.map(c => `${c.qty}+${enc(c.name)}`).join('~');
   return `https://edhpowerlevel.com/?d=${cmd}~~${main}~~Z~`;
 }
@@ -79,20 +99,20 @@ async function run() {
   const msg = document.getElementById('msg');
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    const url   = tab?.url || '';
-    const site  = detectSite(url);
-    const deckId = site ? getDeckId(url, site) : null;
+    const url  = tab?.url || '';
+    const site = detectSite(url);
+    const refs = site ? getDeckRefs(url, site) : [];
 
-    if (!site || !deckId) {
+    if (!site || !refs.length) {
       msg.textContent = 'Open an Archidekt or Moxfield deck page first.';
       return;
     }
 
-    const deck = site === 'archidekt'
-      ? await fetchArchidektDeck(deckId)
-      : await fetchMoxfieldDeck(deckId);
-
-    chrome.tabs.create({ url: buildEDHUrl(deck) });
+    const fetchFn = site === 'archidekt' ? fetchArchidektDeck : fetchMoxfieldDeck;
+    const decks   = await Promise.all(refs.map(ref => fetchFn(ref)));
+    for (const deck of decks) {
+      chrome.tabs.create({ url: buildEDHUrl(deck) });
+    }
     window.close();
   } catch (err) {
     console.error('[EDH Exporter]', err);

@@ -25,19 +25,34 @@ function detectSite(url) {
   return null;
 }
 
-function getDeckId(url, site) {
-  if (!url) return null;
+function parseArchidektRef(param) {
+  const m = (param || '').match(/^([ds])_(\d+)$/);
+  if (!m) return null;
+  return m[1] === 's' ? `snapshots/${m[2]}` : m[2];
+}
+
+function getDeckRefs(url, site) {
+  if (!url) return [];
   try {
     if (site === 'archidekt') {
+      const params = new URLSearchParams(url.split('?')[1] || '');
+      const one = parseArchidektRef(params.get('one'));
+      const two = parseArchidektRef(params.get('two'));
+      if (one && two) return [one, two];
+      if (one) return [one];
+      const snapshotM    = url.match(/\/snapshots\/(\d+)/);
+      if (snapshotM) return [`snapshots/${snapshotM[1]}`];
+      const playtesterM  = url.match(/\/playtester[^/]*\/(\d+)/);
+      if (playtesterM) return [playtesterM[1]];
       const m = url.match(/\/decks\/(\d+)/);
-      return m ? m[1] : null;
+      return m ? [m[1]] : [];
     }
     if (site === 'moxfield') {
       const m = url.match(/\/decks\/([A-Za-z0-9_-]+)/);
-      return m ? m[1] : null;
+      return m ? [m[1]] : [];
     }
   } catch (_) {}
-  return null;
+  return [];
 }
 
 // ─── Archidekt ────────────────────────────────────────────────────────────────
@@ -99,7 +114,7 @@ async function fetchArchidekt(deckId) {
   }
 
   return {
-    commander: commander[0] || null,   // { qty, name }
+    commanders: commander,             // [{ qty, name }, ...]
     mainboard,
     skipped: [...skipped],
     debug: {
@@ -171,7 +186,7 @@ async function fetchMoxfield(deckId) {
   }
 
   return {
-    commander: commander[0] || null,
+    commanders: commander,
     mainboard,
     skipped,
     debug: {
@@ -181,12 +196,12 @@ async function fetchMoxfield(deckId) {
 }
 
 // ─── URL builder ──────────────────────────────────────────────────────────────
-function buildEDHUrl({ commander, mainboard }) {
+function buildEDHUrl({ commanders, mainboard }) {
   const enc = s => encodeURIComponent(s).replace(/%20/g, '+');
-  // commander is { qty, name } or null
-  const cmdQty  = commander?.qty  || 1;
-  const cmdName = commander?.name || 'Unknown Commander';
-  const commanderPart = `Commander~${cmdQty}+${enc(cmdName)}`;
+  const cmdList = (commanders?.length)
+    ? commanders.map(c => `${c.qty}+${enc(c.name)}`).join('~')
+    : `1+${enc('Unknown Commander')}`;
+  const commanderPart = `Commander~${cmdList}`;
   const mainPart = 'Mainboard~' + mainboard
     .map(c => `${c.qty}+${enc(c.name)}`)
     .join('~');
@@ -212,20 +227,24 @@ function showStatus(msg, type) {
   $('statusBox').className = `status visible ${type}`;
 }
 
-function showDeckInfo(commander, mainboard, skipped) {
-  const mainTotal = mainboard.reduce((s, c) => s + c.qty, 0);
-  const cmdTotal  = commander ? (commander.qty || 1) : 0;
-  const total     = mainTotal + cmdTotal;
-  $('infoCommander').textContent = commander ? commander.name : '(none found)';
-  $('infoCount').textContent     = `${total} cards`;
-  $('infoSkipped').textContent   = skipped.length ? skipped.join(', ') : 'none';
-  $('deckInfo').className        = 'deck-info visible';
+function showDeckInfo(results) {
+  $('infoCommander').textContent = results.map(r =>
+    r.commanders.length ? r.commanders.map(c => c.name).join(' + ') : '(none)'
+  ).join(' / ');
+  $('infoCount').textContent = results.map(r => {
+    const main = r.mainboard.reduce((s, c) => s + c.qty, 0);
+    const cmd  = r.commanders.reduce((s, c) => s + (c.qty || 1), 0);
+    return main + cmd;
+  }).join(' / ') + ' cards';
+  const allSkipped = [...new Set(results.flatMap(r => r.skipped))];
+  $('infoSkipped').textContent = allSkipped.length ? allSkipped.join(', ') : 'none';
+  $('deckInfo').className = 'deck-info visible';
 }
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 let currentTab  = null;
 let currentSite = null;
-let deckId      = null;
+let deckIds     = [];
 let deckData    = null;
 let analyzed    = false;
 
@@ -250,14 +269,17 @@ async function init() {
     return;
   }
 
-  deckId = getDeckId(tab.url, currentSite);
-  if (!deckId) {
+  deckIds = getDeckRefs(tab.url, currentSite);
+  if (!deckIds.length) {
     setSiteBadge(`<span class="site-name">${SITE_NAMES[currentSite]}</span> detected`, '');
     showWarning(`Navigate to a specific deck page to export.`);
     return;
   }
 
-  setSiteBadge(`<span class="site-name">${SITE_NAMES[currentSite]}</span> — deck #${deckId}`, 'ok');
+  const isCompare  = deckIds.length > 1;
+  const displayIds = deckIds.map(id => id.split('/').pop()).join(' & ');
+  setSiteBadge(`<span class="site-name">${SITE_NAMES[currentSite]}</span> — ${isCompare ? 'compare' : 'deck'} #${displayIds}`, 'ok');
+  if (isCompare) $('btnExport').innerHTML = '<span class="btn-icon">⚔</span>Analyze Decks';
   $('btnExport').disabled = false;
 
   // Auto-run if toggle is on
@@ -273,33 +295,34 @@ $('btnExport').addEventListener('click', async () => {
     $('deckInfo').className = 'deck-info';
 
     try {
-      let result;
-      if (currentSite === 'archidekt') {
-        result = await fetchArchidekt(deckId);
-      } else if (currentSite === 'moxfield') {
-        result = await fetchMoxfield(deckId);
-      } else {
-        throw new Error('Unsupported site.');
-      }
+      const fetchFn = currentSite === 'archidekt' ? fetchArchidekt
+                    : currentSite === 'moxfield'  ? fetchMoxfield
+                    : null;
+      if (!fetchFn) throw new Error('Unsupported site.');
 
-      deckData = result;
+      deckData = await Promise.all(deckIds.map(id => fetchFn(id)));
 
       // Warnings
       const warnings = [];
-      if (!deckData.commander) {
-        warnings.push('⚠ No commander found. Make sure there is a "Commander" category.');
-      }
-      const total = deckData.mainboard.reduce((s, c) => s + c.qty, 0) + (deckData.commander?.qty || 1);
-      if (total < 99 || total > 102) {
-        warnings.push(`⚠ Deck has ${total} cards (expected 100).`);
+      for (const result of deckData) {
+        if (!result.commanders.length) {
+          warnings.push('⚠ No commander found. Make sure there is a "Commander" category.');
+        }
+        const cmdTotal = result.commanders.reduce((s, c) => s + (c.qty || 1), 0);
+        const total = result.mainboard.reduce((s, c) => s + c.qty, 0) + cmdTotal;
+        if (total < 99 || total > 102) {
+          warnings.push(`⚠ Deck has ${total} cards (expected 100).`);
+        }
       }
 
-      showDeckInfo(deckData.commander, deckData.mainboard, deckData.skipped);
+      showDeckInfo(deckData);
       if (warnings.length) showWarning(warnings.join('<br>'));
 
       analyzed = true;
       $('btnExport').disabled = false;
-      $('btnExport').innerHTML = '<span class="btn-icon">⚡</span>Open on EDH Power Level';
+      $('btnExport').innerHTML = deckData.length > 1
+        ? '<span class="btn-icon">⚡</span>Open Both on EDH Power Level'
+        : '<span class="btn-icon">⚡</span>Open on EDH Power Level';
 
       // Auto mode: immediately open if no blocking warnings
       if ($('autoOpen').checked) $('btnExport').click();
@@ -312,17 +335,18 @@ $('btnExport').addEventListener('click', async () => {
 
   } else {
     if (!deckData) return;
-    const url = buildEDHUrl({
-      commander: deckData.commander || { qty: 1, name: 'Unknown Commander' },
-      mainboard: deckData.mainboard
-    });
-    chrome.tabs.create({ url });
-    showStatus('✓ Opened EDH Power Level in a new tab!', 'success');
+    for (const result of deckData) {
+      chrome.tabs.create({ url: buildEDHUrl(result) });
+    }
+    const multi = deckData.length > 1;
+    showStatus(`✓ Opened ${multi ? 'both decks' : 'EDH Power Level'} in new tab${multi ? 's' : ''}!`, 'success');
     $('btnExport').innerHTML = '<span class="btn-icon">✓</span>Opened!';
     // In auto mode, close the popup immediately after opening
     if ($('autoOpen').checked) { window.close(); return; }
     setTimeout(() => {
-      $('btnExport').innerHTML = '<span class="btn-icon">⚡</span>Open on EDH Power Level';
+      $('btnExport').innerHTML = multi
+        ? '<span class="btn-icon">⚡</span>Open Both on EDH Power Level'
+        : '<span class="btn-icon">⚡</span>Open on EDH Power Level';
     }, 2000);
   }
 });

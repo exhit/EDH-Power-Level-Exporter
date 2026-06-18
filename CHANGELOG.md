@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-06-18
+
+### Added
+- Support for partner commanders and any 2-card commander pairs — both commanders are now included in the exported URL instead of only the first one
+- Support for Archidekt playtester URLs (`archidekt.com/playtester-v2/<id>`) and any other Archidekt URL that contains the deck number in the path
+- Support for Archidekt snapshot URLs (`archidekt.com/snapshots/<id>`) — uses the correct `api/decks/snapshots/<id>/` endpoint
+- Support for Archidekt compare URLs (`archidekt.com/compare?one=d_<id>&two=s_<id>`) — fetches both decks and opens each in its own EDH Power Level tab; `d_` prefix is a deck, `s_` prefix is a snapshot
+
+### Changed
+- Popup now shows both commanders separated by ` + ` for partner decks
+- Popup badge shows "compare #id1 & #id2" when on a compare page
+- Export button label updates to "Analyze Decks" / "Open Both on EDH Power Level" for compare pages
+
 ## [1.6.1] - 2026-06-14
 
 ### Fixed

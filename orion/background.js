@@ -31,7 +31,7 @@ async function fetchArchidektDeck(deckId) {
     if (primaryCat.toLowerCase() === 'commander') commander.push({ qty, name });
     else if (!excludedCats.has(primaryCat)) mainboard.push({ qty, name });
   }
-  return { commander: commander[0] || null, mainboard };
+  return { commanders: commander, mainboard };
 }
 
 // ─── Moxfield fetch ───────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ async function fetchMoxfieldDeck(deckId) {
       if (name) mainboard.push({ qty: e.quantity || 1, name });
     }
   }
-  return { commander: commander[0] || null, mainboard };
+  return { commanders: commander, mainboard };
 }
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {

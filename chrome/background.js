@@ -41,7 +41,7 @@ async function fetchArchidektDeck(deckId) {
     if (primaryCat.toLowerCase() === 'commander') commander.push({ qty, name });
     else if (!excludedCats.has(primaryCat)) mainboard.push({ qty, name });
   }
-  return { commander: commander[0] || null, mainboard };
+  return { commanders: commander, mainboard };
 }
 
 // ─── Moxfield fetch ───────────────────────────────────────────────────────────
@@ -69,15 +69,16 @@ async function fetchMoxfieldDeck(deckId) {
       if (name) mainboard.push({ qty: e.quantity || 1, name });
     }
   }
-  return { commander: commander[0] || null, mainboard };
+  return { commanders: commander, mainboard };
 }
 
 // ─── URL builder ──────────────────────────────────────────────────────────────
-function buildEDHUrl({ commander, mainboard }) {
+function buildEDHUrl({ commanders, mainboard }) {
   const enc = s => encodeURIComponent(s).replace(/%20/g, '+');
-  const cmdQty  = commander?.qty  || 1;
-  const cmdName = commander?.name || 'Unknown Commander';
-  const commanderPart = `Commander~${cmdQty}+${enc(cmdName)}`;
+  const cmdList = (commanders?.length)
+    ? commanders.map(c => `${c.qty}+${enc(c.name)}`).join('~')
+    : `1+${enc('Unknown Commander')}`;
+  const commanderPart = `Commander~${cmdList}`;
   const mainPart = 'Mainboard~' + mainboard.map(c => `${c.qty}+${enc(c.name)}`).join('~');
   return `https://edhpowerlevel.com/?d=${commanderPart}~~${mainPart}~~Z~`;
 }
@@ -121,9 +122,22 @@ chrome.webNavigation.onBeforeNavigate.addListener(async (details) => {
     let deckData;
 
     if (embeddedUrl.includes('archidekt.com')) {
-      const m = embeddedUrl.match(/\/decks\/(\d+)/);
-      if (!m) throw new Error('Could not extract Archidekt deck ID');
-      deckData = await fetchArchidektDeck(m[1]);
+      const parseRef = p => { const m = (p||'').match(/^([ds])_(\d+)$/); return m ? (m[1]==='s'?`snapshots/${m[2]}`:m[2]) : null; };
+      const params   = new URLSearchParams(embeddedUrl.split('?')[1] || '');
+      const one = parseRef(params.get('one'));
+      const two = parseRef(params.get('two'));
+      if (one && two) {
+        const [data1, data2] = await Promise.all([fetchArchidektDeck(one), fetchArchidektDeck(two)]);
+        chrome.tabs.update(tabId, { url: buildEDHUrl(data1) });
+        chrome.tabs.create({ url: buildEDHUrl(data2) });
+        return;
+      }
+      const snapshotM   = embeddedUrl.match(/\/snapshots\/(\d+)/);
+      const playtesterM = embeddedUrl.match(/\/playtester[^/]*\/(\d+)/);
+      const deckM       = embeddedUrl.match(/\/decks\/(\d+)/);
+      const deckId      = snapshotM ? `snapshots/${snapshotM[1]}` : (playtesterM?.[1] ?? deckM?.[1]);
+      if (!deckId) throw new Error('Could not extract Archidekt deck ID');
+      deckData = await fetchArchidektDeck(deckId);
     } else if (embeddedUrl.includes('moxfield.com')) {
       const m = embeddedUrl.match(/\/decks\/([A-Za-z0-9_-]+)/);
       if (!m) throw new Error('Could not extract Moxfield deck ID');
