@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    :root {
+      --bg:      #0d0d12;
+      --card:    #1c1c28;
+      --border:  #2a2a3a;
+      --accent:  #c8973a;
+      --accent2: #8b2be2;
+      --text:    #e8e4d8;
+      --muted:   #6b6880;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 18px 20px;
+      font-family: -apple-system, system-ui, sans-serif;
+      font-size: 14px;
+      color: var(--text);
+      background: var(--bg);
+      min-width: 240px;
+    }
+    .title {
+      margin: 0 0 10px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    #picker {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .dest-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.15s, transform 0.1s;
+    }
+    .dest-btn:hover { border-color: var(--accent2); }
+    .dest-btn:active { transform: translateY(1px); }
+    .dest-btn .arrow { color: var(--accent); }
+    #msg { margin: 0; }
+    #manualCopy {
+      width: 100%;
+      margin-top: 10px;
+      padding: 8px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+      resize: vertical;
+    }
+    .hidden { display: none !important; }
+
+    #printConfirm {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .print-confirm-text {
+      white-space: pre-line;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .print-confirm-actions { display: flex; gap: 8px; }
+    .print-confirm-actions .dest-btn { justify-content: center; }
+    .debug-btn {
+      justify-content: center;
+      border-style: dashed;
+      color: var(--muted);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="picker">
+    <p class="title">Where do you want to export this deck?</p>
+    <button class="dest-btn" id="destEdhPowerLevel" data-dest="edhpowerlevel">
+      <span>EDH Power Level</span>
+      <span class="arrow">→</span>
+    </button>
+    
+    <button class="dest-btn" id="destCommanderSpellbook" data-dest="commanderSpellbook">
+      <span>Commander Spellbook</span>
+      <span class="arrow">→</span>
+    </button>
+
+    <button class="dest-btn" id="destMoxfieldImport" data-dest="moxfieldImport">
+      <span>Moxfield Import</span>
+      <span class="arrow">→</span>
+    </button>
+    
+    <button class="dest-btn" id="destArchidektSandbox" data-dest="archidektSandbox">
+      <span>Archidekt Sandbox</span>
+      <span class="arrow">→</span>
+    </button>
+  </div>
+  <p id="msg" class="hidden"></p>
+  <div id="printConfirm" class="hidden">
+    <p class="title">Printing changes needed for Archidekt</p>
+    <p id="printConfirmText" class="print-confirm-text"></p>
+    <button class="dest-btn debug-btn hidden" id="printConfirmDebugEach" type="button">
+      <span>🐛 Debug: open + copy each card separately</span>
+    </button>
+    <div class="print-confirm-actions">
+      <button class="dest-btn" id="printConfirmCancel" type="button">
+        <span>Cancel</span>
+      </button>
+      <button class="dest-btn" id="printConfirmCopyList" type="button">
+        <span>Copy Decklist</span>
+        <span class="arrow">⧉</span>
+      </button>
+    </div>
+    <div class="print-confirm-actions">
+      <button class="dest-btn" id="printConfirmContinue" type="button">
+        <span>Open In Sandbox</span>
+        <span class="arrow">→</span>
+      </button>
+      <button class="dest-btn" id="printConfirmCopyContinue" type="button">
+        <span>Copy + Sandbox</span>
+        <span class="arrow">→</span>
+      </button>
+    </div>
+  </div>
+  <script src="action.js"></script>
+</body>
+</html>

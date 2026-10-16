@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Archidekt Debug Export</title>
+  <style>
+    :root {
+      --bg:      #0d0d12;
+      --card:    #1c1c28;
+      --border:  #2a2a3a;
+      --accent:  #c8973a;
+      --accent2: #8b2be2;
+      --text:    #e8e4d8;
+      --muted:   #6b6880;
+      --success: #3ecf7e;
+      --warn:    #e8a86a;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, system-ui, sans-serif;
+      font-size: 13px;
+      padding: 16px;
+    }
+    h1 {
+      font-size: 13px;
+      color: var(--accent);
+      letter-spacing: 0.04em;
+      margin-bottom: 12px;
+    }
+    #progressText {
+      font-size: 12px;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+    .bar-track {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      height: 10px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(135deg, var(--accent2), var(--accent));
+      transition: width 0.2s ease;
+    }
+    .status {
+      background: #1f1510;
+      border: 1px solid #6b3d1a;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 11px;
+      color: var(--warn);
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+    .status.done {
+      background: #0d2a1a;
+      border-color: #1d5c38;
+      color: var(--success);
+    }
+    .hidden { display: none !important; }
+    button {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    #stopBtn {
+      background: linear-gradient(135deg, #b23a3a 0%, #7a1f1f 100%);
+      color: #fff;
+    }
+    #stopBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+    #closeBtn {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    .hint {
+      margin-top: 10px;
+      font-size: 10px;
+      color: var(--muted);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h1>🐛 ARCHIDEKT DEBUG EXPORT</h1>
+  <div id="progressText">Starting…</div>
+  <div class="bar-track"><div class="bar-fill" id="barFill"></div></div>
+  <div id="statusText" class="status hidden"></div>
+  <button id="stopBtn" type="button">Stop</button>
+  <button id="closeBtn" type="button" class="hidden">Close</button>
+  <p class="hint">Closing this window also stops the export.</p>
+  <script src="debug-control.js"></script>
+</body>
+</html>

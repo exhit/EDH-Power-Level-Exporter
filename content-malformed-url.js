@@ -1,4 +1,9 @@
-// ─── EDH Power Level Exporter — Malformed URL Interceptor (Orion / Mobile) ────
+// ─── EDHPORT — Malformed URL Interceptor (Orion / Mobile) ────
+// Runs on both edhpowerlevel.com and commanderspellbook.com (see the
+// content_scripts "matches" in manifest.json) — same detection/fetch logic
+// either way, only the final redirect URL differs, picked below via
+// TARGET_BUILDERS keyed on whichever of the two the browser actually landed
+// on (CURRENT_SITE).
 // Detailed debugging: logs and catches errors at each step
 
 const EXCLUDED_NAMES = [
@@ -83,7 +88,7 @@ async function fetchMoxfieldDeck(deckId) {
 }
 
 function buildEDHUrl({ commanders, mainboard }) {
-  console.log('[Step 4] Building EDH URL');
+  console.log('[Step 4] Building EDH Power Level URL');
   try {
     const enc = s => encodeURIComponent(s).replace(/%20/g, '+');
     const cmdList = (commanders?.length)
@@ -99,6 +104,33 @@ function buildEDHUrl({ commanders, mainboard }) {
     throw err;
   }
 }
+
+// Same shape as content-export.js's buildCommanderSpellbookUrl.
+function buildCommanderSpellbookUrl({ commanders, mainboard }) {
+  console.log('[Step 4] Building Commander Spellbook URL');
+  try {
+    const toLines = arr => arr.map(c => `${c.qty} ${c.name}`).join('\n');
+    const params = new URLSearchParams();
+    if (commanders.length) params.set('commanders', toLines(commanders));
+    params.set('decklist', toLines(mainboard));
+    const url = `https://commanderspellbook.com/find-my-combos/?${params.toString()}`;
+    console.log('[Step 4] Built URL:', url);
+    return url;
+  } catch (err) {
+    console.error('[Step 4] URL building failed:', err);
+    throw err;
+  }
+}
+
+// Which redirect target to build for depends on which of the two sites this
+// script is currently running on (both are listed in manifest.json's
+// "matches" for this file).
+const TARGET_BUILDERS = {
+  'edhpowerlevel.com': buildEDHUrl,
+  'commanderspellbook.com': buildCommanderSpellbookUrl
+};
+const CURRENT_SITE = location.hostname.replace(/^www\./, '');
+const buildTargetUrl = TARGET_BUILDERS[CURRENT_SITE];
 
 function fetchDeckViaBackground(site, deckId) {
   return new Promise((resolve, reject) => {
@@ -159,9 +191,14 @@ function fetchDeckViaBackground(site, deckId) {
       .replace(/%23/gi, '#');
     console.log('[Step 2] Decoded URL:', decoded);
 
-    // STEP 2b: Check if this is edhpowerlevel.com
-    if (!decoded.includes('edhpowerlevel.com')) {
-      console.log('[Step 2b] Not an edhpowerlevel.com URL, exiting. URL = ' + decoded);
+    // STEP 2b: Check this is one of the sites we redirect on (guards against
+    // manifest.json's "matches" ever listing a site with no builder here)
+    if (!buildTargetUrl) {
+      console.log('[Step 2b] No URL builder for this site, exiting. host = ' + CURRENT_SITE);
+      return;
+    }
+    if (!decoded.includes(CURRENT_SITE)) {
+      console.log(`[Step 2b] Not a ${CURRENT_SITE} URL, exiting. URL = ` + decoded);
       return;
     }
 
@@ -198,8 +235,8 @@ function fetchDeckViaBackground(site, deckId) {
           fetchDeckViaBackground("archidekt", one),
           fetchDeckViaBackground("archidekt", two)
         ]);
-        window.open(buildEDHUrl(data2), '_blank');
-        window.location.replace(buildEDHUrl(data1));
+        window.open(buildTargetUrl(data2), '_blank');
+        window.location.replace(buildTargetUrl(data1));
         return;
       }
       const snapshotM   = embeddedUrl.match(/\/snapshots\/(\d+)/);
@@ -229,8 +266,8 @@ function fetchDeckViaBackground(site, deckId) {
     }
 
     // STEP 5: Navigate
-    console.log('[Step 5] Navigating to EDH Power Level');
-    const correctUrl = buildEDHUrl(deckData);
+    console.log(`[Step 5] Navigating to ${CURRENT_SITE}`);
+    const correctUrl = buildTargetUrl(deckData);
     console.log('[Step 5] Final URL:', correctUrl);
     window.location.replace(correctUrl);
 

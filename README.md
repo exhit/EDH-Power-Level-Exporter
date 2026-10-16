@@ -1,6 +1,6 @@
-# EDH Power Level Exporter
+# EDHPORT
 
-A Manifest V3 Chrome Extension that exports Commander decks from **Archidekt** and **Moxfield** directly to [edhpowerlevel.com](https://edhpowerlevel.com), and automatically fixes malformed edhpowerlevel.com links that embed a source deck URL.
+A Manifest V3 Chrome Extension that exports Commander decks from **Archidekt** and **Moxfield** directly to [edhpowerlevel.com](https://edhpowerlevel.com) and [commanderspellbook.com](https://commanderspellbook.com), and automatically fixes malformed links on either site that embed a source deck URL.
 
 ---
 
@@ -34,7 +34,7 @@ Flip the **Developer mode** toggle in the top-right corner **ON**.
 2. Select the **`chrome/`** folder inside the downloaded/cloned directory
 3. Click **Select Folder**
 
-The **EDH Power Level Exporter** icon will appear in your toolbar. Pin it via the puzzle-piece icon next to the address bar.
+The **EDHPORT** icon will appear in your toolbar. Pin it via the puzzle-piece icon next to the address bar.
 
 **Updating**
 
@@ -64,7 +64,7 @@ In Orion on iOS, go to: **Settings → Extensions**
 
 Tap **Load Unpacked Extension** and select the **`orion/`** folder inside the downloaded/cloned directory.
 
-The **EDH Power Level Exporter** will appear in Orion's extension list and is ready to use on Archidekt and Moxfield deck pages.
+The **EDHPORT** will appear in Orion's extension list and is ready to use on Archidekt and Moxfield deck pages.
 
 ---
 
@@ -74,12 +74,24 @@ The **EDH Power Level Exporter** will appear in Orion's extension list and is re
 
 1. Navigate to a deck page on **Archidekt** (`archidekt.com/decks/<id>`) or **Moxfield** (`moxfield.com/decks/<id>`)
 2. Click the extension icon
-3. Click **Analyze Deck** — the extension reads your deck and shows the commander, card count, and any skipped categories
-4. Click **Open on EDH Power Level** — a new tab opens with your deck pre-loaded
+3. Pick a destination:
+   - **EDH Power Level** — always available
+   - **Archidekt Sandbox** — shown when your deck is on Moxfield; opens Archidekt's sandbox pre-loaded with the full decklist
+   - **Moxfield Import** — shown when your deck is on Archidekt; copies a plain-text decklist to your clipboard and opens Moxfield's deck list so you can paste it into a new deck
+4. Click **Analyze Deck** — the extension reads your deck and shows the commander, card count, and any skipped categories
+5. Click the destination's export button (e.g. **Open on EDH Power Level**) — a new tab opens with your deck pre-loaded (or, for Moxfield Import, ready to paste)
+
+### On-page export buttons
+
+Deck pages on Archidekt and Moxfield also get a small floating panel (bottom-right) with a logo button per available destination — no need to open the toolbar popup first. Click a logo to fetch and export that deck directly; for Archidekt Sandbox, any required printing swaps are confirmed in an on-page popup before it opens, same as the extension popup's flow.
 
 ### Auto mode
 
-Toggle **Auto-analyze & open on EDH Power Level** in the popup. When on, opening the popup on any deck page will immediately analyze and open EDH Power Level — no clicks needed. The preference is saved across sessions.
+Toggle **Auto-analyze & open on EDH Power Level** in the popup. When on, picking a destination will immediately analyze and export — no further clicks needed. The preference is saved across sessions.
+
+### Cardmarket want list export
+
+On any [cardmarket.com](https://cardmarket.com) want list page (`cardmarket.com/en/Magic/Wants/<id>`), a **Copy as Decklist** button appears right next to the page's own "X Wants - Y Cards" heading. Click it to copy every card currently listed in the want list table to your clipboard as a plain-text decklist (`qty name`, one per line) — ready to paste into Archidekt, Moxfield, or anywhere else that accepts a decklist. Only cards on the currently loaded page are read (want lists spanning multiple pages need each page copied separately).
 
 ### Malformed link interception
 
@@ -108,6 +120,14 @@ Only these category names are excluded by name (exact match, Moxfield boards):
 
 For Archidekt, `includedInDeck: false` is the authoritative signal — name matching is only a fallback.
 
+### Archidekt Sandbox destination
+
+Archidekt's sandbox reads a `deck` query parameter: a JSON array of `{ c: "c"|"m", f: 0, q: <qty>, u: <id> }` entries, where `c` marks commander vs. mainboard and `u` is a card identifier. That identifier is a Scryfall printing ID — confirmed by comparing Archidekt's own `card.uid` field against Scryfall's `id` for the same printing. Moxfield's API exposes the same Scryfall ID per card (`card.scryfall_id`), so a Moxfield-sourced deck can be translated directly into an Archidekt sandbox link. Cards without a resolvable ID are dropped rather than producing a broken entry.
+
+### Moxfield Import destination
+
+Moxfield does have a URL scheme for pre-loading a decklist: `moxfield.com/import?c=<list>`, where `<list>` is one `qty name` pair per line (no `Commander`/`Deck` section headers — the commander is just the first entry). This destination builds that URL directly and opens it — no clipboard involved.
+
 ---
 
 ## Versioning
@@ -135,6 +155,8 @@ git push && git push --tags
 | `tabs` | Open new tabs and update tab URLs |
 | `storage` | Persist the auto-open toggle preference |
 | `webNavigation` | Intercept malformed edhpowerlevel.com navigations |
+| `webRequest` | Detect HTTP 429 responses during the Archidekt debug export, so it can back off instead of leaving tabs stuck on an error page |
 | Host: archidekt.com | Fetch deck data from Archidekt's API |
 | Host: moxfield.com / api.moxfield.com | Fetch deck data from Moxfield's API |
 | Host: edhpowerlevel.com | Intercept and redirect malformed links |
+| Host: cardmarket.com | Inject the "Copy as Decklist" button on want list pages |
