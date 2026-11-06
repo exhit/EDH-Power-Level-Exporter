@@ -52,7 +52,7 @@
         "https://moxfield.com/*",
         "https://www.moxfield.com/*"
       ],
-      "js": ["content-export.js"],
+      "js": ["content-export.js", "content-deck-add.js"],
       "run_at": "document_idle"
     },
     {

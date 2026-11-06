@@ -220,6 +220,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })();
     return true;
   }
+  // From content-cardmarket-wants.js's "Add to Deck" button: stash the list
+  // for content-deck-add.js to pick up once the deck tab loads. Stored rather
+  // than passed directly because the new tab's content script doesn't exist
+  // yet to receive a message, and the deck sites can take a while to render.
+  if (message.type === 'wantsAddToDeck') {
+    (async () => {
+      try {
+        const { deck, text } = message;
+        await chrome.storage.local.set({
+          pendingDeckAdd: { site: deck.site, id: deck.id, text, ts: Date.now() }
+        });
+        await chrome.tabs.create({ url: deck.url, active: true });
+        sendResponse({ success: true });
+      } catch (err) {
+        sendResponse({ success: false, error: err instanceof Error ? err.message : String(err) });
+      }
+    })();
+    return true;
+  }
   if (message.type === 'exportResolveArchidekt') {
     (async () => {
       try {
